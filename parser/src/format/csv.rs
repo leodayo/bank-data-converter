@@ -1,8 +1,8 @@
-use crate::error::ParserError;
-use std::{
-    io::{BufRead, BufReader, Read},
-    str::FromStr,
+use crate::{
+    error::ParserError,
+    model::{TransactionStatus, TxType},
 };
+use std::io::{BufRead, BufReader, Read};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CsvRecord {
@@ -57,13 +57,7 @@ impl CsvRecord {
                     field: "TX_ID",
                     reason: e.to_string(),
                 })?,
-            tx_type: parts[1]
-                .trim()
-                .parse::<TxType>()
-                .map_err(|e| ParserError::InvalidField {
-                    field: "TX_TYPE",
-                    reason: e.to_string(),
-                })?,
+            tx_type: parts[1].trim().parse::<TxType>()?,
             from_user_id: parts[2].trim().parse::<i64>().map_err(|e| {
                 ParserError::InvalidField {
                     field: "FROM_USER_ID",
@@ -91,60 +85,9 @@ impl CsvRecord {
                     field: "TIMESTAMP",
                     reason: e.to_string(),
                 })?,
-            status: parts[6].trim().parse::<TransactionStatus>().map_err(|e| {
-                ParserError::InvalidField {
-                    field: "STATUS",
-                    reason: e.to_string(),
-                }
-            })?,
+            status: parts[6].trim().parse::<TransactionStatus>()?,
             description: parts[7].trim().trim_matches('"').to_string(),
         })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum TxType {
-    Deposit,
-    Transfer,
-    Withdrawal,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum TransactionStatus {
-    Success,
-    Failure,
-    Pending,
-}
-
-impl FromStr for TxType {
-    type Err = ParserError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            _ if s.eq_ignore_ascii_case("DEPOSIT") => Ok(TxType::Deposit),
-            _ if s.eq_ignore_ascii_case("TRANSFER") => Ok(TxType::Transfer),
-            _ if s.eq_ignore_ascii_case("WITHDRAWAL") => Ok(TxType::Withdrawal),
-            _ => Err(ParserError::InvalidField {
-                field: "TX_TYPE",
-                reason: "unknown transaction type".to_string(),
-            }),
-        }
-    }
-}
-
-impl FromStr for TransactionStatus {
-    type Err = ParserError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            _ if s.eq_ignore_ascii_case("SUCCESS") => Ok(TransactionStatus::Success),
-            _ if s.eq_ignore_ascii_case("FAILURE") => Ok(TransactionStatus::Failure),
-            _ if s.eq_ignore_ascii_case("PENDING") => Ok(TransactionStatus::Pending),
-            _ => Err(ParserError::InvalidField {
-                field: "STATUS",
-                reason: "unknown transaction status".to_string(),
-            }),
-        }
     }
 }
 

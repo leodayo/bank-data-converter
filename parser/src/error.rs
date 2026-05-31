@@ -6,6 +6,9 @@ pub enum ParserError {
     EmptyFile,
     InvalidHeader { expected: &'static str, got: String },
     InvalidFormat { reason: String },
+    MissingField(&'static str),
+    UnknownField(String),
+    DuplicateField(&'static str),
 
     Io(io::Error),
 }
@@ -27,6 +30,15 @@ impl fmt::Display for ParserError {
             }
             ParserError::InvalidFormat { reason } => {
                 write!(f, "Invalid format: {}", reason)
+            }
+            ParserError::MissingField(field) => {
+                write!(f, "Missing field: {}", field)
+            }
+            ParserError::UnknownField(field) => {
+                write!(f, "Unknown field: {}", field)
+            }
+            ParserError::DuplicateField(field) => {
+                write!(f, "Duplicate field: {}", field)
             }
         }
     }
