@@ -1,5 +1,6 @@
 use std::{error, fmt, io};
 
+/// Errors that can occur during the parsing process.
 #[derive(Debug)]
 pub enum ParserError {
     InvalidField { field: &'static str, reason: String },

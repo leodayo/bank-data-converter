@@ -1,3 +1,26 @@
+//! Binary serialization and deserialization for transaction logs.
+//!
+//! This module implements a custom binary format prefixed with the magic bytes `YPBN`.
+//! All numeric fields are encoded in **Big-Endian (BE)** byte order.
+//!
+//! ### Binary Record Layout
+//!
+//! Each record in the stream consists of a header and a body:
+//!
+//! | Component | Field Name | Type | Size (Bytes) | Description |
+//! | :--- | :--- | :--- | :--- | :--- |
+//! | **Header** | `magic` | `[u8; 4]` | 4 | Must be exactly `b"YPBN"`. |
+//! | | `record_size` | `u32` | 4 | Total size of the record body |
+//! | **Body** | `tx_id` | `u64` | 8 | Unique transaction ID. |
+//! | | `tx_type` | `u8` | 1 | `0` = Deposit, `1` = Transfer, `2` = Withdrawal. |
+//! | | `from_user_id`| `u64` | 8 | ID of the sender. |
+//! | | `to_user_id` | `u64` | 8 | ID of the recipient. |
+//! | | `amount` | `i64` | 8 | Transaction amount (signed). |
+//! | | `timestamp` | `u64` | 8 | Unix timestamp. |
+//! | | `status` | `u8` | 1 | `0` = Success, `1` = Failure, `2` = Pending. |
+//! | | `desc_len` | `u32` | 4 | Length of the description string in bytes. |
+//! | | `description` | `[u8]` | `desc_len`| UTF-8 encoded description text. |
+
 use std::io::{BufReader, Read, Write};
 
 use crate::{
@@ -5,21 +28,34 @@ use crate::{
     model::{Transaction, TransactionStatus, TxType},
 };
 
+/// The binary header preceding every transaction record in the stream.
 #[derive(Debug, PartialEq, Eq)]
 pub struct BinRecordHeader {
     pub magic: [u8; 4],
     pub record_size: u32,
 }
 
+/// An intermediate representation of a transaction matching the binary layout.
+///
+/// This structure holds raw unsigned 64-bit identifiers used in the binary stream
+/// and can be safely converted into the domain model [`Transaction`] via [`TryFrom`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct BinRecord {
+    /// Unique identifier for the transaction.
     pub tx_id: u64,
+    /// The type of the transaction.
     pub tx_type: TxType,
+    /// Identifier of the user initiating the transaction.
     pub from_user_id: u64,
+    /// Identifier of the user receiving the transaction.
     pub to_user_id: u64,
+    /// The monetary value transferred.
     pub amount: i64,
+    /// Unix timestamp indicating when the transaction occurred.
     pub timestamp: u64,
+    /// The status of the transaction.
     pub status: TransactionStatus,
+    /// Textual details accompanying the transaction record. Can be empty.
     pub description: String,
 }
 
@@ -69,9 +105,20 @@ impl TryFrom<Transaction> for BinRecord {
 }
 
 impl BinRecord {
+    /// Magic signature bytes identifying the `YPBN` binary protocol.
     const MAGIC: &[u8; 4] = b"YPBN";
+
+    /// Size of all fixed-width body fields combined (8*5 + 1*2 + 4 = 46 bytes).
     const EXPECTED_SIZE_WITHOUT_DESCRIPTION: u32 = 46;
 
+    /// Reads all binary records sequentially from the given input stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParserError`] if:
+    /// - The stream breaks unexpectedly before a record finishes.
+    /// - Any record does not begin with the `YPBN` magic bytes.
+    /// - Fields contain invalid formats or values that violate constraints.
     pub fn read_from(r: impl Read) -> Result<Vec<Self>, ParserError> {
         let mut reader = BufReader::new(r);
         let mut records = Vec::new();
@@ -90,6 +137,12 @@ impl BinRecord {
         Ok(records)
     }
 
+    /// Serializes and writes a slice of records into the provided output writer stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParserError::InvalidFormat`] if the description text is too large
+    /// to fit in a 32-bit integer length prefix, or if an underlying I/O error occurs.
     pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
         for record in records {
             writer.write_all(b"YPBN")?;

@@ -1,18 +1,45 @@
+//! Comma-Separated Values (CSV) serialization and deserialization for transaction logs.
+//!
+//! This module provides capabilities to read and write transaction records using a strict,
+//! newline-delimited, comma-separated format.
+//!
+//! ### Expected CSV Schema
+//!
+//! Every valid CSV file must begin with a specific header row. Columns are position-based
+//! and must appear in the following order:
+//!
+//! ```text
+//! TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
+//! ```
+
 use crate::{
     error::ParserError,
     model::{Transaction, TransactionStatus, TxType},
 };
 use std::io::{BufRead, BufReader, Read, Write};
 
+/// An intermediate representation of a transaction matching the CSV layout.
+///
+/// This structure matches the exact order and names of fields found within the CSV schema.
+/// It implements [`From`] for lossless, infallible conversion into the core domain
+/// model [`Transaction`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct CsvRecord {
+    /// Unique identifier for the transaction.
     pub tx_id: i64,
+    /// The type of the transaction (parsed case-insensitively).
     pub tx_type: TxType,
+    /// Identifier of the user initiating the transaction.
     pub from_user_id: i64,
+    /// Identifier of the user receiving the transaction.
     pub to_user_id: i64,
+    /// The monetary value transferred.
     pub amount: i64,
+    /// Unix timestamp indicating when the transaction occurred.
     pub timestamp: i64,
+    /// The status of the transaction (parsed case-insensitively).
     pub status: TransactionStatus,
+    /// Textual details accompanying the transaction record. Can be empty.
     pub description: String,
 }
 
@@ -47,10 +74,21 @@ impl From<Transaction> for CsvRecord {
 }
 
 impl CsvRecord {
+    /// The precise header line that must match at the beginning of the file.
     const EXPECTED_HEADER: &str =
         "TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION";
+
+    /// Total expected count of fields separated by commas per line.
     const FIELDS_COUNT: usize = 8;
 
+    /// Reads all CSV records sequentially from the given input stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParserError`] if:
+    /// - The source stream is completely empty ([`ParserError::EmptyFile`]).
+    /// - The first line does not match `Self::EXPECTED_HEADER` exactly ([`ParserError::InvalidHeader`]).
+    /// - Any record line has a mismatched column count or contains values that fail to parse into their respective types.
     pub fn read_from(r: impl Read) -> Result<Vec<Self>, ParserError> {
         let reader = BufReader::new(r);
         let mut lines = reader.lines();
@@ -71,6 +109,13 @@ impl CsvRecord {
         Ok(records)
     }
 
+    /// Serializes and writes a slice of records into the provided output writer stream.
+    ///
+    /// This method automatically prepends the expected CSV header row followed by a newline character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an underlying [`ParserError::Io`] error if a write operation fails.
     pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
         writer.write_all(Self::EXPECTED_HEADER.as_bytes())?;
         writer.write_all(b"\n")?;

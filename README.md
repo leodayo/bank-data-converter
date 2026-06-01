@@ -7,8 +7,14 @@ Project for parcing, converting and comparing transactions presented in csv, tex
 - `comparer/` – CLI to compare two files containing transactions.
 
 ## Build
+Build binaries (will appear in `target/release/`)
 ```bash
 cargo build --release
+```
+
+Generate and open docs
+```bash
+cargo doc -p parser --no-deps --open
 ```
 
 ## Examples
