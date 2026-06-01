@@ -1,8 +1,8 @@
 use crate::{
     error::ParserError,
-    model::{TransactionStatus, TxType},
+    model::{Transaction, TransactionStatus, TxType},
 };
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CsvRecord {
@@ -14,6 +14,36 @@ pub struct CsvRecord {
     pub timestamp: i64,
     pub status: TransactionStatus,
     pub description: String,
+}
+
+impl From<CsvRecord> for Transaction {
+    fn from(rec: CsvRecord) -> Self {
+        Self {
+            tx_id: rec.tx_id,
+            tx_type: rec.tx_type,
+            from_user_id: rec.from_user_id,
+            to_user_id: rec.to_user_id,
+            amount: rec.amount,
+            timestamp: rec.timestamp,
+            status: rec.status,
+            description: rec.description,
+        }
+    }
+}
+
+impl From<Transaction> for CsvRecord {
+    fn from(tx: Transaction) -> Self {
+        Self {
+            tx_id: tx.tx_id,
+            tx_type: tx.tx_type,
+            from_user_id: tx.from_user_id,
+            to_user_id: tx.to_user_id,
+            amount: tx.amount,
+            timestamp: tx.timestamp,
+            status: tx.status,
+            description: tx.description,
+        }
+    }
 }
 
 impl CsvRecord {
@@ -39,6 +69,27 @@ impl CsvRecord {
         }
 
         Ok(records)
+    }
+
+    pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
+        writer.write_all(Self::EXPECTED_HEADER.as_bytes())?;
+        writer.write_all(b"\n")?;
+
+        for record in records {
+            let line = format!(
+                "{},{},{},{},{},{},{},\"{}\"\n",
+                record.tx_id,
+                record.tx_type,
+                record.from_user_id,
+                record.to_user_id,
+                record.amount,
+                record.timestamp,
+                record.status,
+                record.description
+            );
+            writer.write_all(line.as_bytes())?
+        }
+        Ok(())
     }
 
     fn parse_record(line: String) -> Result<Self, ParserError> {
@@ -204,5 +255,25 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn write_and_read_back() {
+        let original = vec![CsvRecord {
+            tx_id: 1003,
+            tx_type: TxType::Withdrawal,
+            from_user_id: 502,
+            to_user_id: 0,
+            amount: 1000,
+            timestamp: 1672538400000,
+            status: TransactionStatus::Pending,
+            description: "ATM withdrawal".to_string(),
+        }];
+
+        let mut buffer = Vec::new();
+        CsvRecord::write_to(&original, &mut buffer).unwrap();
+
+        let read_back = CsvRecord::read_from(Cursor::new(buffer)).unwrap();
+        assert_eq!(original, read_back);
     }
 }

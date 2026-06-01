@@ -1,8 +1,8 @@
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 
 use crate::{
     error::ParserError,
-    model::{TransactionStatus, TxType},
+    model::{Transaction, TransactionStatus, TxType},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,6 +21,51 @@ pub struct BinRecord {
     pub timestamp: u64,
     pub status: TransactionStatus,
     pub description: String,
+}
+
+impl TryFrom<BinRecord> for Transaction {
+    type Error = ParserError;
+
+    fn try_from(rec: BinRecord) -> Result<Self, Self::Error> {
+        fn to_i64(value: u64, field: &str) -> Result<i64, ParserError> {
+            value.try_into().map_err(|_| ParserError::InvalidFormat {
+                reason: format!("{} too large for i64: {}", field, value),
+            })
+        }
+
+        Ok(Self {
+            tx_id: to_i64(rec.tx_id, "tx_id")?,
+            tx_type: rec.tx_type,
+            from_user_id: to_i64(rec.from_user_id, "from_user_id")?,
+            to_user_id: to_i64(rec.to_user_id, "to_user_id")?,
+            amount: rec.amount,
+            timestamp: to_i64(rec.timestamp, "timestamp")?,
+            status: rec.status,
+            description: rec.description,
+        })
+    }
+}
+
+impl TryFrom<Transaction> for BinRecord {
+    type Error = ParserError;
+
+    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+        fn to_u64(value: i64, field: &str) -> Result<u64, ParserError> {
+            value.try_into().map_err(|_| ParserError::InvalidFormat {
+                reason: format!("{} cannot be negative or exceed u64: {}", field, value),
+            })
+        }
+        Ok(Self {
+            tx_id: to_u64(tx.tx_id, "tx_id")?,
+            tx_type: tx.tx_type,
+            from_user_id: to_u64(tx.from_user_id, "from_user_id")?,
+            to_user_id: to_u64(tx.to_user_id, "to_user_id")?,
+            amount: tx.amount, // i64
+            timestamp: to_u64(tx.timestamp, "timestamp")?,
+            status: tx.status,
+            description: tx.description,
+        })
+    }
 }
 
 impl BinRecord {
@@ -43,6 +88,35 @@ impl BinRecord {
         }
 
         Ok(records)
+    }
+
+    pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
+        for record in records {
+            writer.write_all(b"YPBN")?;
+            let desc_len: u32 = u32::try_from(record.description.len()).map_err(|_| {
+                ParserError::InvalidFormat {
+                    reason: "DESCRIPTION is too long".to_string(),
+                }
+            })?;
+            let record_size = Self::EXPECTED_SIZE_WITHOUT_DESCRIPTION
+                .checked_add(desc_len)
+                .ok_or_else(|| ParserError::InvalidFormat {
+                    reason: "RECORD_SIZE overflow".to_string(),
+                })?;
+            writer.write_all(&record_size.to_be_bytes())?;
+
+            writer.write_all(&record.tx_id.to_be_bytes())?;
+            writer.write_all(&[record.tx_type.into()])?;
+            writer.write_all(&record.from_user_id.to_be_bytes())?;
+            writer.write_all(&record.to_user_id.to_be_bytes())?;
+            writer.write_all(&record.amount.to_be_bytes())?;
+            writer.write_all(&record.timestamp.to_be_bytes())?;
+            writer.write_all(&[record.status.into()])?;
+            writer.write_all(&desc_len.to_be_bytes())?;
+            writer.write_all(record.description.as_bytes())?;
+        }
+
+        Ok(())
     }
 
     fn read_header(reader: &mut impl Read) -> Result<BinRecordHeader, ParserError> {
@@ -359,5 +433,25 @@ mod tests {
                 description: String::new()
             }
         );
+    }
+
+    #[test]
+    fn write_and_read_back() {
+        let original = vec![BinRecord {
+            tx_id: 1003,
+            tx_type: TxType::Withdrawal,
+            from_user_id: 502,
+            to_user_id: 0,
+            amount: 1000,
+            timestamp: 1672538400000,
+            status: TransactionStatus::Pending,
+            description: "ATM withdrawal".to_string(),
+        }];
+
+        let mut buffer = Vec::new();
+        BinRecord::write_to(&original, &mut buffer).unwrap();
+
+        let read_back = BinRecord::read_from(Cursor::new(buffer)).unwrap();
+        assert_eq!(original, read_back);
     }
 }

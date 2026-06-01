@@ -1,8 +1,8 @@
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 
 use crate::{
     error::ParserError,
-    model::{TransactionStatus, TxType},
+    model::{Transaction, TransactionStatus, TxType},
 };
 
 macro_rules! parse_u64_field {
@@ -43,6 +43,52 @@ pub struct TextRecord {
     pub description: String,
 }
 
+impl TryFrom<TextRecord> for Transaction {
+    type Error = ParserError;
+
+    fn try_from(rec: TextRecord) -> Result<Self, Self::Error> {
+        fn to_i64(value: u64, field: &str) -> Result<i64, ParserError> {
+            value.try_into().map_err(|_| ParserError::InvalidFormat {
+                reason: format!("{} too large for i64: {}", field, value),
+            })
+        }
+
+        Ok(Self {
+            tx_id: to_i64(rec.tx_id, "tx_id")?,
+            tx_type: rec.tx_type,
+            from_user_id: to_i64(rec.from_user_id, "from_user_id")?,
+            to_user_id: to_i64(rec.to_user_id, "to_user_id")?,
+            amount: to_i64(rec.amount, "amount")?,
+            timestamp: to_i64(rec.timestamp, "timestamp")?,
+            status: rec.status,
+            description: rec.description,
+        })
+    }
+}
+
+impl TryFrom<Transaction> for TextRecord {
+    type Error = ParserError;
+
+    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+        fn to_u64(value: i64, field: &str) -> Result<u64, ParserError> {
+            value.try_into().map_err(|_| ParserError::InvalidFormat {
+                reason: format!("{} cannot be negative or exceed u64: {}", field, value),
+            })
+        }
+
+        Ok(Self {
+            tx_id: to_u64(tx.tx_id, "tx_id")?,
+            tx_type: tx.tx_type,
+            from_user_id: to_u64(tx.from_user_id, "from_user_id")?,
+            to_user_id: to_u64(tx.to_user_id, "to_user_id")?,
+            amount: to_u64(tx.amount, "amount")?,
+            timestamp: to_u64(tx.timestamp, "timestamp")?,
+            status: tx.status,
+            description: tx.description,
+        })
+    }
+}
+
 impl TextRecord {
     pub fn read_from(r: impl Read) -> Result<Vec<Self>, ParserError> {
         let reader = BufReader::new(r);
@@ -55,6 +101,25 @@ impl TextRecord {
         }
 
         processor.finalize()
+    }
+
+    pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
+        for record in records {
+            let line = format!(
+                "TX_ID:{}\nTX_TYPE:{}\nFROM_USER_ID:{}\nTO_USER_ID:{}\nAMOUNT:{}\nTIMESTAMP:{}\nSTATUS:{}\nDESCRIPTION:{}\n",
+                record.tx_id,
+                record.tx_type,
+                record.from_user_id,
+                record.to_user_id,
+                record.amount,
+                record.timestamp,
+                record.status,
+                record.description
+            );
+            writer.write_all(line.as_bytes())?;
+            writer.write_all(b"\n")?;
+        }
+        Ok(())
     }
 }
 
@@ -420,5 +485,25 @@ mod tests {
         let err = TextRecord::read_from(data).unwrap_err();
 
         assert!(matches!(err, ParserError::DuplicateField("STATUS")));
+    }
+
+    #[test]
+    fn write_and_read_back() {
+        let original = vec![TextRecord {
+            tx_id: 1003,
+            tx_type: TxType::Withdrawal,
+            from_user_id: 502,
+            to_user_id: 0,
+            amount: 1000,
+            timestamp: 1672538400000,
+            status: TransactionStatus::Pending,
+            description: "ATM withdrawal".to_string(),
+        }];
+
+        let mut buffer = Vec::new();
+        TextRecord::write_to(&original, &mut buffer).unwrap();
+
+        let read_back = TextRecord::read_from(Cursor::new(buffer)).unwrap();
+        assert_eq!(original, read_back);
     }
 }
