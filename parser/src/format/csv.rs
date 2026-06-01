@@ -33,12 +33,12 @@ impl CsvRecord {
             });
         }
 
-        let mut result = Vec::new();
+        let mut records = Vec::new();
         for line in lines {
-            result.push(Self::parse_record(line?)?);
+            records.push(Self::parse_record(line?)?);
         }
 
-        Ok(result)
+        Ok(records)
     }
 
     fn parse_record(line: String) -> Result<Self, ParserError> {

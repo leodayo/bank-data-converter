@@ -56,3 +56,35 @@ impl FromStr for TransactionStatus {
         })
     }
 }
+
+impl TryFrom<u8> for TxType {
+    type Error = ParserError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TxType::Deposit),
+            1 => Ok(TxType::Transfer),
+            2 => Ok(TxType::Withdrawal),
+            _ => Err(ParserError::InvalidField {
+                field: "TX_TYPE",
+                reason: format!("invalid byte: {:#04X}", value),
+            }),
+        }
+    }
+}
+
+impl TryFrom<u8> for TransactionStatus {
+    type Error = ParserError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TransactionStatus::Success),
+            1 => Ok(TransactionStatus::Failure),
+            2 => Ok(TransactionStatus::Pending),
+            _ => Err(ParserError::InvalidField {
+                field: "STATUS",
+                reason: format!("invalid byte: {:#04X}", value),
+            }),
+        }
+    }
+}
