@@ -1,28 +1,50 @@
+//! Domain models representing transactions and their attributes.
+//!
+//! This module contains core data structures used by the parser to map,
+//! validate, and store transaction records.
+
 use crate::error::ParserError;
 
+/// Represents a single transaction record.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Transaction {
+    /// Unique identifier for the transaction.
     pub tx_id: i64,
+    /// The type of the transaction (e.g., Deposit, Transfer).
     pub tx_type: TxType,
+    /// Unique identifier of the user initiating the transaction.
     pub from_user_id: i64,
+    /// Unique identifier of the user receiving the transaction.
     pub to_user_id: i64,
+    /// The monetary value transferred, represented in the smallest currency unit (e.g., cents).
     pub amount: i64,
+    /// Unix timestamp indicating when the transaction was created.
     pub timestamp: i64,
+    /// The current processing state of the transaction.
     pub status: TransactionStatus,
+    /// Textual details accompanying the transaction. Can be empty.
     pub description: String,
 }
 
+/// The type of a financial transaction.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TxType {
+    /// Funds being deposited to an account.
     Deposit,
+    /// Funds being moved between two different users.
     Transfer,
+    /// Funds being withdrawed from an account.
     Withdrawal,
 }
 
+/// The status of a transaction.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TransactionStatus {
+    /// The transaction completed successfully.
     Success,
+    /// The transaction failed during processing.
     Failure,
+    /// The transaction is awaiting processing or confirmation.
     Pending,
 }
 

@@ -1,3 +1,31 @@
+//! Key-Value plain-text serialization and deserialization for transaction logs.
+//!
+//! This module implements a flexible block-based plain-text format. Each transaction
+//! record is represented as a block of `KEY: VALUE` lines, and blocks are separated by
+//! one or more empty lines.
+//!
+//! ### Format Rules
+//! - **Fields Order**: Fields within a transaction block can appear in any order.
+//! - **Comments**: Lines starting with `#` are treated as comments and are ignored.
+//! - **Separators**: A completely blank line signals the end of the current record.
+//! - **Uniqueness**: Duplicate keys inside a single transaction block trigger an error.
+//!
+//! ### Example Layout
+//! ```text
+//! # This is an initial account deposit transaction
+//! TX_ID: 1001
+//! TX_TYPE: DEPOSIT
+//! FROM_USER_ID: 0
+//! TO_USER_ID: 501
+//! AMOUNT: 50000
+//! TIMESTAMP: 1672531200000
+//! STATUS: SUCCESS
+//! DESCRIPTION: Initial account deposit transaction
+//!
+//! TX_ID: 1002
+//! ...
+//! ```
+
 use std::io::{BufRead, BufReader, Read, Write};
 
 use crate::{
@@ -31,15 +59,27 @@ macro_rules! parse_enum_field {
     }};
 }
 
+/// An intermediate representation of a transaction matching the plain-text layout.
+///
+/// This structure stores raw attributes parsed from a `KEY: VALUE` text block. It can
+/// be safely converted into the core domain model [`Transaction`] via [`TryFrom`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct TextRecord {
+    /// Unique identifier for the transaction.
     pub tx_id: u64,
+    /// The type of the transaction.
     pub tx_type: TxType,
+    /// Identifier of the user initiating the transaction.
     pub from_user_id: u64,
+    /// Identifier of the user receiving the transaction.
     pub to_user_id: u64,
+    /// The monetary value transferred.
     pub amount: u64,
+    /// Unix timestamp indicating when the transaction occurred.
     pub timestamp: u64,
+    /// The status of the transaction.
     pub status: TransactionStatus,
+    /// Textual details accompanying the transaction record. Can be empty.
     pub description: String,
 }
 
@@ -90,6 +130,16 @@ impl TryFrom<Transaction> for TextRecord {
 }
 
 impl TextRecord {
+    /// Reads all key-value blocks sequentially from the given input plain-text stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParserError`] if:
+    /// - Any line is corrupted or missing the required colon delimiter (`:`).
+    /// - An unknown key is encountered ([`ParserError::UnknownField`]).
+    /// - A required field is missing when a block ends ([`ParserError::MissingField`]).
+    /// - A field is defined more than once in a single block ([`ParserError::DuplicateField`]).
+    /// - Field validation or type parsing fails ([`ParserError::InvalidField`]).
     pub fn read_from(r: impl Read) -> Result<Vec<Self>, ParserError> {
         let reader = BufReader::new(r);
         let mut processor = RecordProcessor::new();
@@ -103,6 +153,14 @@ impl TextRecord {
         processor.finalize()
     }
 
+    /// Serializes and writes a slice of records as plain-text key-value blocks into the stream.
+    ///
+    /// Each transaction is printed field by field, followed by an additional newline
+    /// acting as a block separator.
+    ///
+    /// # Errors
+    ///
+    /// Returns an underlying [`ParserError::Io`] error if a write operation fails.
     pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
         for record in records {
             let line = format!(

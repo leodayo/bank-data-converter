@@ -3,9 +3,9 @@ use clap::Parser;
 /// Converter for Transactions between following formats: CSV, TEXT, BIN
 #[derive(Parser)]
 pub struct Cli {
-    /// input file path
+    /// optional input file path, reads from stdin if omitted
     #[arg(long)]
-    pub input: String,
+    pub input: Option<String>,
 
     /// imput file format (csv, text, bin)
     #[arg(long)]
