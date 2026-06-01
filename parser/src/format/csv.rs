@@ -77,7 +77,7 @@ impl CsvRecord {
 
         for record in records {
             let line = format!(
-                "{},{},{},{},{},{},{},\"{}\"\n",
+                "{},{},{},{},{},{},{},{}\n",
                 record.tx_id,
                 record.tx_type,
                 record.from_user_id,
@@ -137,7 +137,7 @@ impl CsvRecord {
                     reason: e.to_string(),
                 })?,
             status: parts[6].trim().parse::<TransactionStatus>()?,
-            description: parts[7].trim().trim_matches('"').to_string(),
+            description: parts[7].trim().to_string(),
         })
     }
 }
@@ -177,7 +177,7 @@ mod tests {
                 amount: 50000,
                 timestamp: 1672531200000,
                 status: TransactionStatus::Success,
-                description: "Initial account funding".to_string()
+                description: "\"Initial account funding\"".to_string()
             }
         );
         assert_eq!(
@@ -190,7 +190,7 @@ mod tests {
                 amount: 15000,
                 timestamp: 1672534800000,
                 status: TransactionStatus::Failure,
-                description: "Payment for services, invoice #123".to_string()
+                description: "\"Payment for services, invoice #123\"".to_string()
             }
         );
         assert_eq!(
@@ -203,7 +203,7 @@ mod tests {
                 amount: 1000,
                 timestamp: 1672538400000,
                 status: TransactionStatus::Pending,
-                description: "ATM withdrawal".to_string()
+                description: "\"ATM withdrawal\"".to_string()
             }
         );
     }

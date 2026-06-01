@@ -106,7 +106,7 @@ impl TextRecord {
     pub fn write_to(records: &[Self], writer: &mut impl Write) -> Result<(), ParserError> {
         for record in records {
             let line = format!(
-                "TX_ID:{}\nTX_TYPE:{}\nFROM_USER_ID:{}\nTO_USER_ID:{}\nAMOUNT:{}\nTIMESTAMP:{}\nSTATUS:{}\nDESCRIPTION:{}\n",
+                "TX_ID: {}\nTX_TYPE: {}\nFROM_USER_ID: {}\nTO_USER_ID: {}\nAMOUNT: {}\nTIMESTAMP: {}\nSTATUS: {}\nDESCRIPTION: {}\n",
                 record.tx_id,
                 record.tx_type,
                 record.from_user_id,
@@ -177,8 +177,7 @@ impl RecordProcessor {
                 if self.current_record.description.is_some() {
                     return Err(ParserError::DuplicateField("DESCRIPTION"));
                 }
-                self.current_record
-                    .description(value.trim().trim_matches('"').to_string());
+                self.current_record.description(value.trim().to_string());
             }
             _ => return Err(ParserError::UnknownField(key.to_string())),
         }
@@ -363,7 +362,7 @@ mod tests {
                 amount: 10000,
                 timestamp: 1633036800000,
                 status: TransactionStatus::Success,
-                description: "Terminal deposit".to_string()
+                description: "\"Terminal deposit\"".to_string()
             }
         );
         assert_eq!(
@@ -376,7 +375,7 @@ mod tests {
                 amount: 1000,
                 timestamp: 1633056800000,
                 status: TransactionStatus::Failure,
-                description: "User transfer".to_string()
+                description: "\"User transfer\"".to_string()
             }
         );
         assert_eq!(
@@ -389,7 +388,7 @@ mod tests {
                 amount: 100,
                 timestamp: 1633066800000,
                 status: TransactionStatus::Success,
-                description: "User withdrawal".to_string()
+                description: "\"User withdrawal\"".to_string()
             }
         );
     }
