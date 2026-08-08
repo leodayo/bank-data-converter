@@ -1,4 +1,4 @@
-# YPBank Parser & CLI Utilities
+# Bank Parser & CLI Utilities
 Project for parcing, converting and comparing transactions presented in csv, text and bin format. See [specs](./docs/format/specs) for the formats specifications and [examples](./docs/format/examples) for the examples.
 
 ## Project structure
